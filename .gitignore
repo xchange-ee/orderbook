@@ -1,3 +1,4 @@
 node_modules
 .secret
 build
+test/deposit_withdraw_bnb_test.ref.txt

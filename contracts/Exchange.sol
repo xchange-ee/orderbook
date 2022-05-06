@@ -9,10 +9,21 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 
 import "./FeeManager.sol";
 
+import "./interfaces/IERC20Metadata.sol";
+
 contract Exchange is Pausable, FeeManager, AccessControl {
+    using Address for address;
+    using SafeMath for uint256;
+    using Counters for Counters.Counter;
+    Counters.Counter private _totalTokens;
+    Counters.Counter private symbolNameIndex;
+
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant SUPER_ADM_ROLE = keccak256("SUPER_ADM_ROLE");
 
@@ -38,6 +49,18 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 offers_length;
     }
 
+    struct TokenItem {
+        uint256 curSellPrice;
+        uint256 highestSellPrice;
+        uint256 amountSellPrices;
+        uint256 curBuyPrice;
+        uint256 lowestBuyPrice;
+        uint256 amountBuyPrices;
+        address tokenContract;
+        string symbolName;
+        uint256 decimal;
+    }
+
     struct Token {
         address tokenContract;
         string symbolName;
@@ -49,12 +72,14 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 curSellPrice;
         uint256 highestSellPrice;
         uint256 amountSellPrices;
+        uint256 decimal;
     }
 
-    mapping(uint8 => Token) tokens;
-    uint8 symbolNameIndex;
+    mapping(uint256 => Token) tokens;
 
-    mapping(address => mapping(uint8 => uint256)) tokenBalanceForAddress;
+    mapping(address => mapping(uint256 => uint256)) tokenBalanceForAddress;
+
+    mapping(uint256 => TokenItem) public tokensSupport;
 
     mapping(address => uint256) balanceBnbForAddress;
 
@@ -75,15 +100,15 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     function getSymbolIndexOrThrow(string memory symbolName)
         internal
         view
-        returns (uint8)
+        returns (uint256)
     {
-        uint8 index = getSymbolIndex(symbolName);
+        uint256 index = getSymbolIndex(symbolName);
         require(index > 0);
         return index;
     }
 
     function hasToken(string memory symbolName) public view returns (bool) {
-        uint8 index = getSymbolIndex(symbolName);
+        uint256 index = getSymbolIndex(symbolName);
         if (index == 0) {
             return false;
         }
@@ -93,9 +118,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     function getSymbolIndex(string memory symbolName)
         internal
         view
-        returns (uint8)
+        returns (uint256)
     {
-        for (uint8 i = 1; i <= symbolNameIndex; i++) {
+        for (uint256 i = 1; i <= symbolNameIndex.current(); i++) {
             if (stringsEqual(tokens[i].symbolName, symbolName)) {
                 return i;
             }
@@ -130,7 +155,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     function depositToken(string memory symbolName, uint256 amountTokens)
         public
     {
-        uint8 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
+        uint256 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
         require(tokens[symbolNameIndexKey].tokenContract != address(0));
 
         IERC20 token = IERC20(tokens[symbolNameIndexKey].tokenContract);
@@ -149,7 +174,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     function withdrawToken(string memory symbolName, uint256 amountTokens)
         public
     {
-        uint8 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
+        uint256 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
         require(tokens[symbolNameIndexKey].tokenContract != address(0));
 
         IERC20 token = IERC20(tokens[symbolNameIndexKey].tokenContract);
@@ -172,7 +197,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         view
         returns (uint256)
     {
-        uint8 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
+        uint256 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
         return tokenBalanceForAddress[msg.sender][symbolNameIndexKey];
     }
 
@@ -181,7 +206,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         view
         returns (uint256[] memory, uint256[] memory)
     {
-        uint8 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
+        uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
         uint256[] memory arrPricesSell = new uint256[](
             tokens[tokenNameIndex].amountSellPrices
         );
@@ -233,7 +258,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         view
         returns (uint256[] memory, uint256[] memory)
     {
-        uint8 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
+        uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
         uint256[] memory arrPricesBuy = new uint256[](
             tokens[tokenNameIndex].amountBuyPrices
         );
@@ -284,7 +309,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 priceInWei,
         uint256 amount
     ) public {
-        uint8 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
+        uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
         uint256 totalAmountOfEtherNecessary = 0;
         uint256 amountOfTokensNecessary = amount;
 
@@ -493,7 +518,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
 
     function createBuyLimitOrderForTokensUnableToMatchWithSellOrderForBuyer(
         string memory symbolName,
-        uint8 tokenNameIndex,
+        uint256 tokenNameIndex,
         uint256 priceInWei,
         uint256 amountOfTokensNecessary,
         uint256 totalAmountOfEtherNecessary
@@ -523,7 +548,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     }
 
     function addBuyOffer(
-        uint8 tokenIndex,
+        uint256 tokenIndex,
         uint256 priceInWei,
         uint256 amount,
         address who
@@ -602,7 +627,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     }
 
     function addSellOffer(
-        uint8 tokenIndex,
+        uint256 tokenIndex,
         uint256 priceInWei,
         uint256 amount,
         address who
@@ -692,7 +717,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 priceInWei,
         uint256 offerKey
     ) public {
-        uint8 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
+        uint256 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
 
         if (isSellOrder) {
             require(
@@ -750,7 +775,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 priceInWei,
         uint256 amount
     ) public payable {
-        uint8 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
+        uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
         uint256 totalAmountOfEtherNecessary = 0;
         uint256 totalAmountOfEtherAvailable = 0;
 
@@ -971,7 +996,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
 
     function createSellLimitOrderForTokensUnableToMatchWithBuyOrderForSeller(
         string memory symbolName,
-        uint8 tokenNameIndex,
+        uint256 tokenNameIndex,
         uint256 priceInWei,
         uint256 amountOfTokensNecessary,
         uint256 totalAmountOfEtherNecessary
@@ -1006,13 +1031,44 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         );
     }
 
-    function addToken(string memory symbolName, address bep20TokenAddress)
+    function addToken(address tokenAddress) public onlyRole(MANAGER_ROLE) {
+        IERC20Metadata newToken = IERC20Metadata(tokenAddress);
+        require(!hasToken(newToken.symbol()));
+        symbolNameIndex.increment();
+        tokens[symbolNameIndex.current()].symbolName = newToken.symbol();
+        tokens[symbolNameIndex.current()].decimal = newToken.decimals();
+        tokens[symbolNameIndex.current()].tokenContract = tokenAddress;
+    }
+
+    function removeToken(string memory symbolName)
         public
         onlyRole(MANAGER_ROLE)
     {
-        require(!hasToken(symbolName));
-        symbolNameIndex++;
-        tokens[symbolNameIndex].symbolName = symbolName;
-        tokens[symbolNameIndex].tokenContract = bep20TokenAddress;
+        uint256 index = getSymbolIndex(symbolName);
+        if (index == 0) {
+            return;
+        }
+        delete tokens[index];
+    }
+
+    function listTokens() public view returns (TokenItem[] memory _tokens) {
+        uint256 totalItemCount = symbolNameIndex.current();
+        uint256 currentIndex = 0;
+        _tokens = new TokenItem[](totalItemCount);
+        for (uint256 i = 0; i < totalItemCount; i++) {
+            uint256 currentId = 1;
+            _tokens[currentIndex] = TokenItem({
+                curSellPrice: tokens[currentId].curSellPrice,
+                highestSellPrice: tokens[currentId].highestSellPrice,
+                amountSellPrices: tokens[currentId].amountSellPrices,
+                curBuyPrice: tokens[currentId].curBuyPrice,
+                lowestBuyPrice: tokens[currentId].lowestBuyPrice,
+                amountBuyPrices: tokens[currentId].amountBuyPrices,
+                tokenContract: tokens[currentId].tokenContract,
+                symbolName: tokens[currentId].symbolName,
+                decimal: tokens[currentId].decimal
+            });
+            currentIndex += 1;
+        }
     }
 }
