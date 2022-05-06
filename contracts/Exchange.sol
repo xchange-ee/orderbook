@@ -1,12 +1,30 @@
 // contracts/Exchange.sol
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.13;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract Exchange {
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
+import "@openzeppelin/contracts/security/Pausable.sol";
+
+import "./FeeManager.sol";
+
+contract Exchange is Pausable, FeeManager, AccessControl {
+    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
+    bytes32 public constant SUPER_ADM_ROLE = keccak256("SUPER_ADM_ROLE");
+
+    constructor() {
+        _setupRole(MANAGER_ROLE, msg.sender);
+        _setupRole(SUPER_ADM_ROLE, msg.sender);
+    }
+
+    function setPaused(bool _setPaused) public onlyRole(MANAGER_ROLE) {
+        return (_setPaused) ? _pause() : _unpause();
+    }
+
     struct Offer {
         uint256 amountTokens;
         address who;
@@ -178,31 +196,31 @@ contract Exchange {
                 uint256 sellVolumeAtPrice = 0;
                 uint256 sellOffersKey = 0;
                 sellOffersKey = tokens[tokenNameIndex]
-                .sellBook[sellWhilePrice]
-                .offers_key;
+                    .sellBook[sellWhilePrice]
+                    .offers_key;
                 while (
                     sellOffersKey <=
                     tokens[tokenNameIndex]
-                    .sellBook[sellWhilePrice]
-                    .offers_length
+                        .sellBook[sellWhilePrice]
+                        .offers_length
                 ) {
                     sellVolumeAtPrice += tokens[tokenNameIndex]
-                    .sellBook[sellWhilePrice]
-                    .offers[sellOffersKey]
-                    .amountTokens;
+                        .sellBook[sellWhilePrice]
+                        .offers[sellOffersKey]
+                        .amountTokens;
                     sellOffersKey++;
                 }
                 arrVolumesSell[sellCounter] = sellVolumeAtPrice;
                 if (
                     tokens[tokenNameIndex]
-                    .sellBook[sellWhilePrice]
-                    .higherPrice == 0
+                        .sellBook[sellWhilePrice]
+                        .higherPrice == 0
                 ) {
                     break;
                 } else {
                     sellWhilePrice = tokens[tokenNameIndex]
-                    .sellBook[sellWhilePrice]
-                    .higherPrice;
+                        .sellBook[sellWhilePrice]
+                        .higherPrice;
                 }
                 sellCounter++;
             }
@@ -231,16 +249,16 @@ contract Exchange {
                 uint256 buyVolumeAtPrice = 0;
                 uint256 buyOffersKey = 0;
                 buyOffersKey = tokens[tokenNameIndex]
-                .buyBook[whilePrice]
-                .offers_key;
+                    .buyBook[whilePrice]
+                    .offers_key;
                 while (
                     buyOffersKey <=
                     tokens[tokenNameIndex].buyBook[whilePrice].offers_length
                 ) {
                     buyVolumeAtPrice += tokens[tokenNameIndex]
-                    .buyBook[whilePrice]
-                    .offers[buyOffersKey]
-                    .amountTokens;
+                        .buyBook[whilePrice]
+                        .offers[buyOffersKey]
+                        .amountTokens;
                     buyOffersKey++;
                 }
                 arrVolumesBuy[counter] = buyVolumeAtPrice;
@@ -252,8 +270,8 @@ contract Exchange {
                     break;
                 } else {
                     whilePrice = tokens[tokenNameIndex]
-                    .buyBook[whilePrice]
-                    .higherPrice;
+                        .buyBook[whilePrice]
+                        .higherPrice;
                 }
                 counter++;
             }
@@ -287,17 +305,17 @@ contract Exchange {
             uint256 offers_key;
             while (whilePrice <= priceInWei && amountOfTokensNecessary > 0) {
                 offers_key = tokens[tokenNameIndex]
-                .sellBook[whilePrice]
-                .offers_key;
+                    .sellBook[whilePrice]
+                    .offers_key;
                 while (
                     offers_key <=
                     tokens[tokenNameIndex].sellBook[whilePrice].offers_length &&
                     amountOfTokensNecessary > 0
                 ) {
                     uint256 volumeAtPriceFromAddress = tokens[tokenNameIndex]
-                    .sellBook[whilePrice]
-                    .offers[offers_key]
-                    .amountTokens;
+                        .sellBook[whilePrice]
+                        .offers[offers_key]
+                        .amountTokens;
 
                     if (volumeAtPriceFromAddress <= amountOfTokensNecessary) {
                         totalAmountOfEtherAvailable =
@@ -331,16 +349,16 @@ contract Exchange {
                         require(
                             balanceBnbForAddress[
                                 tokens[tokenNameIndex]
-                                .sellBook[whilePrice]
-                                .offers[offers_key]
-                                .who
+                                    .sellBook[whilePrice]
+                                    .offers[offers_key]
+                                    .who
                             ] +
                                 totalAmountOfEtherAvailable >=
                                 balanceBnbForAddress[
                                     tokens[tokenNameIndex]
-                                    .sellBook[whilePrice]
-                                    .offers[offers_key]
-                                    .who
+                                        .sellBook[whilePrice]
+                                        .offers[offers_key]
+                                        .who
                                 ]
                         );
 
@@ -349,15 +367,15 @@ contract Exchange {
                         ] += volumeAtPriceFromAddress;
 
                         tokens[tokenNameIndex]
-                        .sellBook[whilePrice]
-                        .offers[offers_key]
-                        .amountTokens = 0;
+                            .sellBook[whilePrice]
+                            .offers[offers_key]
+                            .amountTokens = 0;
 
                         balanceBnbForAddress[
                             tokens[tokenNameIndex]
-                            .sellBook[whilePrice]
-                            .offers[offers_key]
-                            .who
+                                .sellBook[whilePrice]
+                                .offers[offers_key]
+                                .who
                         ] += totalAmountOfEtherAvailable;
                         tokens[tokenNameIndex]
                             .sellBook[whilePrice]
@@ -367,9 +385,9 @@ contract Exchange {
                     } else {
                         require(
                             tokens[tokenNameIndex]
-                            .sellBook[whilePrice]
-                            .offers[offers_key]
-                            .amountTokens > amountOfTokensNecessary
+                                .sellBook[whilePrice]
+                                .offers[offers_key]
+                                .amountTokens > amountOfTokensNecessary
                         );
 
                         totalAmountOfEtherNecessary =
@@ -391,28 +409,28 @@ contract Exchange {
                         require(
                             balanceBnbForAddress[
                                 tokens[tokenNameIndex]
-                                .sellBook[whilePrice]
-                                .offers[offers_key]
-                                .who
+                                    .sellBook[whilePrice]
+                                    .offers[offers_key]
+                                    .who
                             ] +
                                 totalAmountOfEtherNecessary >=
                                 balanceBnbForAddress[
                                     tokens[tokenNameIndex]
-                                    .sellBook[whilePrice]
-                                    .offers[offers_key]
-                                    .who
+                                        .sellBook[whilePrice]
+                                        .offers[offers_key]
+                                        .who
                                 ]
                         );
 
                         tokens[tokenNameIndex]
-                        .sellBook[whilePrice]
-                        .offers[offers_key]
-                        .amountTokens -= amountOfTokensNecessary;
-                        balanceBnbForAddress[
-                            tokens[tokenNameIndex]
                             .sellBook[whilePrice]
                             .offers[offers_key]
-                            .who
+                            .amountTokens -= amountOfTokensNecessary;
+                        balanceBnbForAddress[
+                            tokens[tokenNameIndex]
+                                .sellBook[whilePrice]
+                                .offers[offers_key]
+                                .who
                         ] += totalAmountOfEtherNecessary;
                         tokenBalanceForAddress[msg.sender][
                             tokenNameIndex
@@ -423,39 +441,37 @@ contract Exchange {
                     if (
                         offers_key ==
                         tokens[tokenNameIndex]
-                        .sellBook[whilePrice]
-                        .offers_length &&
+                            .sellBook[whilePrice]
+                            .offers_length &&
                         tokens[tokenNameIndex]
-                        .sellBook[whilePrice]
-                        .offers[offers_key]
-                        .amountTokens ==
+                            .sellBook[whilePrice]
+                            .offers[offers_key]
+                            .amountTokens ==
                         0
                     ) {
                         tokens[tokenNameIndex].amountSellPrices--;
                         if (
                             whilePrice ==
                             tokens[tokenNameIndex]
-                            .sellBook[whilePrice]
-                            .higherPrice ||
+                                .sellBook[whilePrice]
+                                .higherPrice ||
                             tokens[tokenNameIndex]
-                            .sellBook[whilePrice]
-                            .higherPrice ==
+                                .sellBook[whilePrice]
+                                .higherPrice ==
                             0
                         ) {
                             tokens[tokenNameIndex].curSellPrice = 0;
                         } else {
                             tokens[tokenNameIndex].curSellPrice = tokens[
                                 tokenNameIndex
-                            ]
-                            .sellBook[whilePrice]
-                            .higherPrice;
+                            ].sellBook[whilePrice].higherPrice;
                             tokens[tokenNameIndex]
-                            .sellBook[
-                                tokens[tokenNameIndex]
-                                .sellBook[whilePrice]
-                                .higherPrice
-                            ]
-                            .lowerPrice = 0;
+                                .sellBook[
+                                    tokens[tokenNameIndex]
+                                        .sellBook[whilePrice]
+                                        .higherPrice
+                                ]
+                                .lowerPrice = 0;
                         }
                     }
                     offers_key++;
@@ -528,24 +544,24 @@ contract Exchange {
                     tokens[tokenIndex].curBuyPrice = priceInWei;
 
                     tokens[tokenIndex]
-                    .buyBook[priceInWei]
-                    .higherPrice = priceInWei;
+                        .buyBook[priceInWei]
+                        .higherPrice = priceInWei;
 
                     tokens[tokenIndex].buyBook[priceInWei].lowerPrice = 0;
                 } else {
                     tokens[tokenIndex]
-                    .buyBook[lowestBuyPrice]
-                    .lowerPrice = priceInWei;
+                        .buyBook[lowestBuyPrice]
+                        .lowerPrice = priceInWei;
                     tokens[tokenIndex]
-                    .buyBook[priceInWei]
-                    .higherPrice = lowestBuyPrice;
+                        .buyBook[priceInWei]
+                        .higherPrice = lowestBuyPrice;
                     tokens[tokenIndex].buyBook[priceInWei].lowerPrice = 0;
                 }
                 tokens[tokenIndex].lowestBuyPrice = priceInWei;
             } else if (curBuyPrice < priceInWei) {
                 tokens[tokenIndex]
-                .buyBook[curBuyPrice]
-                .higherPrice = priceInWei;
+                    .buyBook[curBuyPrice]
+                    .higherPrice = priceInWei;
                 tokens[tokenIndex].buyBook[priceInWei].higherPrice = priceInWei;
                 tokens[tokenIndex].buyBook[priceInWei].lowerPrice = curBuyPrice;
                 tokens[tokenIndex].curBuyPrice = priceInWei;
@@ -559,23 +575,23 @@ contract Exchange {
                         priceInWei
                     ) {
                         tokens[tokenIndex]
-                        .buyBook[priceInWei]
-                        .lowerPrice = buyPrice;
+                            .buyBook[priceInWei]
+                            .lowerPrice = buyPrice;
                         tokens[tokenIndex]
-                        .buyBook[priceInWei]
-                        .higherPrice = tokens[tokenIndex]
-                        .buyBook[buyPrice]
-                        .higherPrice;
+                            .buyBook[priceInWei]
+                            .higherPrice = tokens[tokenIndex]
+                            .buyBook[buyPrice]
+                            .higherPrice;
 
                         tokens[tokenIndex]
-                        .buyBook[
-                            tokens[tokenIndex].buyBook[buyPrice].higherPrice
-                        ]
-                        .lowerPrice = priceInWei;
+                            .buyBook[
+                                tokens[tokenIndex].buyBook[buyPrice].higherPrice
+                            ]
+                            .lowerPrice = priceInWei;
 
                         tokens[tokenIndex]
-                        .buyBook[buyPrice]
-                        .higherPrice = priceInWei;
+                            .buyBook[buyPrice]
+                            .higherPrice = priceInWei;
 
                         weFoundLocation = true;
                     }
@@ -611,21 +627,21 @@ contract Exchange {
                     tokens[tokenIndex].sellBook[priceInWei].lowerPrice = 0;
                 } else {
                     tokens[tokenIndex]
-                    .sellBook[highestSellPrice]
-                    .higherPrice = priceInWei;
+                        .sellBook[highestSellPrice]
+                        .higherPrice = priceInWei;
                     tokens[tokenIndex]
-                    .sellBook[priceInWei]
-                    .lowerPrice = highestSellPrice;
+                        .sellBook[priceInWei]
+                        .lowerPrice = highestSellPrice;
                     tokens[tokenIndex].sellBook[priceInWei].higherPrice = 0;
                 }
                 tokens[tokenIndex].highestSellPrice = priceInWei;
             } else if (curSellPrice > priceInWei) {
                 tokens[tokenIndex]
-                .sellBook[curSellPrice]
-                .lowerPrice = priceInWei;
+                    .sellBook[curSellPrice]
+                    .lowerPrice = priceInWei;
                 tokens[tokenIndex]
-                .sellBook[priceInWei]
-                .higherPrice = curSellPrice;
+                    .sellBook[priceInWei]
+                    .higherPrice = curSellPrice;
                 tokens[tokenIndex].sellBook[priceInWei].lowerPrice = 0;
                 tokens[tokenIndex].curSellPrice = priceInWei;
             } else {
@@ -639,30 +655,32 @@ contract Exchange {
                         priceInWei
                     ) {
                         tokens[tokenIndex]
-                        .sellBook[priceInWei]
-                        .lowerPrice = sellPrice;
+                            .sellBook[priceInWei]
+                            .lowerPrice = sellPrice;
                         tokens[tokenIndex]
-                        .sellBook[priceInWei]
-                        .higherPrice = tokens[tokenIndex]
-                        .sellBook[sellPrice]
-                        .higherPrice;
+                            .sellBook[priceInWei]
+                            .higherPrice = tokens[tokenIndex]
+                            .sellBook[sellPrice]
+                            .higherPrice;
 
                         tokens[tokenIndex]
-                        .sellBook[
-                            tokens[tokenIndex].sellBook[sellPrice].higherPrice
-                        ]
-                        .lowerPrice = priceInWei;
+                            .sellBook[
+                                tokens[tokenIndex]
+                                    .sellBook[sellPrice]
+                                    .higherPrice
+                            ]
+                            .lowerPrice = priceInWei;
 
                         tokens[tokenIndex]
-                        .sellBook[sellPrice]
-                        .higherPrice = priceInWei;
+                            .sellBook[sellPrice]
+                            .higherPrice = priceInWei;
 
                         weFoundLocation = true;
                     }
 
                     sellPrice = tokens[tokenIndex]
-                    .sellBook[sellPrice]
-                    .higherPrice;
+                        .sellBook[sellPrice]
+                        .higherPrice;
                 }
             }
         }
@@ -679,15 +697,15 @@ contract Exchange {
         if (isSellOrder) {
             require(
                 tokens[symbolNameIndexKey]
-                .sellBook[priceInWei]
-                .offers[offerKey]
-                .who == msg.sender
+                    .sellBook[priceInWei]
+                    .offers[offerKey]
+                    .who == msg.sender
             );
 
             uint256 tokensAmount = tokens[symbolNameIndexKey]
-            .sellBook[priceInWei]
-            .offers[offerKey]
-            .amountTokens;
+                .sellBook[priceInWei]
+                .offers[offerKey]
+                .amountTokens;
 
             require(
                 tokenBalanceForAddress[msg.sender][symbolNameIndexKey] +
@@ -699,20 +717,20 @@ contract Exchange {
                 symbolNameIndexKey
             ] += tokensAmount;
             tokens[symbolNameIndexKey]
-            .sellBook[priceInWei]
-            .offers[offerKey]
-            .amountTokens = 0;
+                .sellBook[priceInWei]
+                .offers[offerKey]
+                .amountTokens = 0;
         } else {
             require(
                 tokens[symbolNameIndexKey]
-                .buyBook[priceInWei]
-                .offers[offerKey]
-                .who == msg.sender
+                    .buyBook[priceInWei]
+                    .offers[offerKey]
+                    .who == msg.sender
             );
             uint256 etherToRefund = tokens[symbolNameIndexKey]
-            .buyBook[priceInWei]
-            .offers[offerKey]
-            .amountTokens * priceInWei;
+                .buyBook[priceInWei]
+                .offers[offerKey]
+                .amountTokens * priceInWei;
 
             require(
                 balanceBnbForAddress[msg.sender] + etherToRefund >=
@@ -721,9 +739,9 @@ contract Exchange {
 
             balanceBnbForAddress[msg.sender] += etherToRefund;
             tokens[symbolNameIndexKey]
-            .buyBook[priceInWei]
-            .offers[offerKey]
-            .amountTokens = 0;
+                .buyBook[priceInWei]
+                .offers[offerKey]
+                .amountTokens = 0;
         }
     }
 
@@ -755,8 +773,8 @@ contract Exchange {
 
             while (whilePrice >= priceInWei && amountOfTokensNecessary > 0) {
                 offers_key = tokens[tokenNameIndex]
-                .buyBook[whilePrice]
-                .offers_key;
+                    .buyBook[whilePrice]
+                    .offers_key;
 
                 while (
                     offers_key <=
@@ -764,9 +782,9 @@ contract Exchange {
                     amountOfTokensNecessary > 0
                 ) {
                     uint256 volumeAtPriceFromAddress = tokens[tokenNameIndex]
-                    .buyBook[whilePrice]
-                    .offers[offers_key]
-                    .amountTokens;
+                        .buyBook[whilePrice]
+                        .offers[offers_key]
+                        .amountTokens;
 
                     if (volumeAtPriceFromAddress <= amountOfTokensNecessary) {
                         totalAmountOfEtherAvailable =
@@ -792,16 +810,16 @@ contract Exchange {
                         require(
                             tokenBalanceForAddress[
                                 tokens[tokenNameIndex]
-                                .buyBook[whilePrice]
-                                .offers[offers_key]
-                                .who
+                                    .buyBook[whilePrice]
+                                    .offers[offers_key]
+                                    .who
                             ][tokenNameIndex] +
                                 volumeAtPriceFromAddress >=
                                 tokenBalanceForAddress[
                                     tokens[tokenNameIndex]
-                                    .buyBook[whilePrice]
-                                    .offers[offers_key]
-                                    .who
+                                        .buyBook[whilePrice]
+                                        .offers[offers_key]
+                                        .who
                                 ][tokenNameIndex]
                         );
 
@@ -813,15 +831,15 @@ contract Exchange {
 
                         tokenBalanceForAddress[
                             tokens[tokenNameIndex]
-                            .buyBook[whilePrice]
-                            .offers[offers_key]
-                            .who
+                                .buyBook[whilePrice]
+                                .offers[offers_key]
+                                .who
                         ][tokenNameIndex] += volumeAtPriceFromAddress;
 
                         tokens[tokenNameIndex]
-                        .buyBook[whilePrice]
-                        .offers[offers_key]
-                        .amountTokens = 0;
+                            .buyBook[whilePrice]
+                            .offers[offers_key]
+                            .amountTokens = 0;
 
                         balanceBnbForAddress[
                             msg.sender
@@ -863,23 +881,23 @@ contract Exchange {
                         require(
                             tokenBalanceForAddress[
                                 tokens[tokenNameIndex]
-                                .buyBook[whilePrice]
-                                .offers[offers_key]
-                                .who
+                                    .buyBook[whilePrice]
+                                    .offers[offers_key]
+                                    .who
                             ][tokenNameIndex] +
                                 amountOfTokensNecessary >=
                                 tokenBalanceForAddress[
                                     tokens[tokenNameIndex]
-                                    .buyBook[whilePrice]
-                                    .offers[offers_key]
-                                    .who
+                                        .buyBook[whilePrice]
+                                        .offers[offers_key]
+                                        .who
                                 ][tokenNameIndex]
                         );
 
                         tokens[tokenNameIndex]
-                        .buyBook[whilePrice]
-                        .offers[offers_key]
-                        .amountTokens -= amountOfTokensNecessary;
+                            .buyBook[whilePrice]
+                            .offers[offers_key]
+                            .amountTokens -= amountOfTokensNecessary;
 
                         balanceBnbForAddress[
                             msg.sender
@@ -887,9 +905,9 @@ contract Exchange {
 
                         tokenBalanceForAddress[
                             tokens[tokenNameIndex]
-                            .buyBook[whilePrice]
-                            .offers[offers_key]
-                            .who
+                                .buyBook[whilePrice]
+                                .offers[offers_key]
+                                .who
                         ][tokenNameIndex] += amountOfTokensNecessary;
 
                         amountOfTokensNecessary = 0;
@@ -898,40 +916,39 @@ contract Exchange {
                     if (
                         offers_key ==
                         tokens[tokenNameIndex]
-                        .buyBook[whilePrice]
-                        .offers_length &&
+                            .buyBook[whilePrice]
+                            .offers_length &&
                         tokens[tokenNameIndex]
-                        .buyBook[whilePrice]
-                        .offers[offers_key]
-                        .amountTokens ==
+                            .buyBook[whilePrice]
+                            .offers[offers_key]
+                            .amountTokens ==
                         0
                     ) {
                         tokens[tokenNameIndex].amountBuyPrices--;
                         if (
                             whilePrice ==
                             tokens[tokenNameIndex]
-                            .buyBook[whilePrice]
-                            .lowerPrice ||
+                                .buyBook[whilePrice]
+                                .lowerPrice ||
                             tokens[tokenNameIndex]
-                            .buyBook[whilePrice]
-                            .lowerPrice ==
+                                .buyBook[whilePrice]
+                                .lowerPrice ==
                             0
                         ) {
                             tokens[tokenNameIndex].curBuyPrice = 0;
                         } else {
                             tokens[tokenNameIndex].curBuyPrice = tokens[
                                 tokenNameIndex
-                            ]
-                            .buyBook[whilePrice]
-                            .lowerPrice;
+                            ].buyBook[whilePrice].lowerPrice;
 
                             tokens[tokenNameIndex]
-                            .buyBook[
-                                tokens[tokenNameIndex]
-                                .buyBook[whilePrice]
-                                .lowerPrice
-                            ]
-                            .higherPrice = tokens[tokenNameIndex].curBuyPrice;
+                                .buyBook[
+                                    tokens[tokenNameIndex]
+                                        .buyBook[whilePrice]
+                                        .lowerPrice
+                                ]
+                                .higherPrice = tokens[tokenNameIndex]
+                                .curBuyPrice;
                         }
                     }
                     offers_key++;
@@ -989,8 +1006,10 @@ contract Exchange {
         );
     }
 
-
-      function addToken(string symbolName, address bep20TokenAddress) public onlyowner {
+    function addToken(string memory symbolName, address bep20TokenAddress)
+        public
+        onlyRole(MANAGER_ROLE)
+    {
         require(!hasToken(symbolName));
         symbolNameIndex++;
         tokens[symbolNameIndex].symbolName = symbolName;
