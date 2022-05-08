@@ -82,6 +82,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     mapping(uint256 => TokenItem) public tokensSupport;
 
     mapping(address => uint256) balanceBnbForAddress;
+    mapping(uint256 => mapping(string => string)) pairs;
 
     function stringsEqual(string storage _a, string memory _b)
         internal
