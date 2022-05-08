@@ -39,6 +39,8 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     struct Offer {
         uint256 amountTokens;
         address who;
+        address mainToken;
+        address quoteToken;
     }
 
     struct OrderBook {
@@ -50,6 +52,21 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     }
 
     struct TokenItem {
+        uint256 id;
+        address baseToken;
+        string baseCurrency;
+        string baseScale;
+        uint256 baseMinSize;
+        uint256 baseMaxSize;
+        address quoteToken;
+        string quoteCurrency;
+        string quoteScale;
+        uint256 quoteMinSize;
+        uint256 quoteMaxSize;
+        uint256 position;
+    }
+
+    struct ItemPair {
         uint256 curSellPrice;
         uint256 highestSellPrice;
         uint256 amountSellPrices;
@@ -82,7 +99,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     mapping(uint256 => TokenItem) public tokensSupport;
 
     mapping(address => uint256) balanceBnbForAddress;
-    mapping(uint256 => mapping(string => string)) pairs;
+    mapping(string => ItemPair) pairs;
 
     function stringsEqual(string storage _a, string memory _b)
         internal
