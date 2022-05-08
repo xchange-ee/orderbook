@@ -1,11 +1,16 @@
 const Exchange = artifacts.require('Exchange')
-const Token = artifacts.require('Token')
+const BRZ = artifacts.require('BRZ')
+const BLU = artifacts.require('BLU')
 
 module.exports = function (deployer) {}
 
 module.exports = async function (deployer, network, accounts) {
   await deployer.deploy(Exchange)
-  await deployer.deploy(Token, 'BRZ', 100000000000, {
+  await deployer.deploy(BRZ, 'BRZ', 1000000000000, {
     from: accounts[0],
+  })
+
+  await deployer.deploy(BLU, 'BLU', 1000000000000, {
+    from: accounts[1],
   })
 }

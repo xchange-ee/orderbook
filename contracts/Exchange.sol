@@ -23,6 +23,8 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     using Counters for Counters.Counter;
     Counters.Counter private _totalTokens;
     Counters.Counter private symbolNameIndex;
+    Counters.Counter private _pairIdCounter;
+    Counters.Counter private _positions;
 
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant SUPER_ADM_ROLE = keccak256("SUPER_ADM_ROLE");
@@ -39,7 +41,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     struct Offer {
         uint256 amountTokens;
         address who;
-        address mainToken;
+        address baseToken;
         address quoteToken;
     }
 
@@ -52,21 +54,6 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     }
 
     struct TokenItem {
-        uint256 id;
-        address baseToken;
-        string baseCurrency;
-        string baseScale;
-        uint256 baseMinSize;
-        uint256 baseMaxSize;
-        address quoteToken;
-        string quoteCurrency;
-        string quoteScale;
-        uint256 quoteMinSize;
-        uint256 quoteMaxSize;
-        uint256 position;
-    }
-
-    struct ItemPair {
         uint256 curSellPrice;
         uint256 highestSellPrice;
         uint256 amountSellPrices;
@@ -76,6 +63,22 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         address tokenContract;
         string symbolName;
         uint256 decimal;
+    }
+
+    struct ItemPair {
+        uint256 id;
+        address baseToken;
+        string baseCurrency;
+        uint8 baseScale;
+        uint256 baseMinSize;
+        uint256 baseMaxSize;
+        address quoteToken;
+        string quoteCurrency;
+        uint8 quoteScale;
+        uint256 quoteMinSize;
+        uint256 quoteMaxSize;
+        uint256 position;
+        string pair;
     }
 
     struct Token {
@@ -99,7 +102,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     mapping(uint256 => TokenItem) public tokensSupport;
 
     mapping(address => uint256) balanceBnbForAddress;
-    mapping(string => ItemPair) pairs;
+    mapping(uint256 => ItemPair) pairs;
 
     function stringsEqual(string storage _a, string memory _b)
         internal
@@ -140,6 +143,15 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     {
         for (uint256 i = 1; i <= symbolNameIndex.current(); i++) {
             if (stringsEqual(tokens[i].symbolName, symbolName)) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    function getPairIndex(string memory pair) internal view returns (uint256) {
+        for (uint256 i = 1; i <= _pairIdCounter.current(); i++) {
+            if (stringsEqual(pairs[i].pair, pair)) {
                 return i;
             }
         }
@@ -325,7 +337,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     function buyToken(
         string memory symbolName,
         uint256 priceInWei,
-        uint256 amount
+        uint256 amount,
+        address baseToken,
+        address quoteToken
     ) public {
         uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
         uint256 totalAmountOfEtherNecessary = 0;
@@ -340,7 +354,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                 tokenNameIndex,
                 priceInWei,
                 amountOfTokensNecessary,
-                totalAmountOfEtherNecessary
+                totalAmountOfEtherNecessary,
+                baseToken,
+                quoteToken
             );
         } else {
             uint256 totalAmountOfEtherAvailable = 0;
@@ -528,7 +544,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                     tokenNameIndex,
                     priceInWei,
                     amountOfTokensNecessary,
-                    totalAmountOfEtherNecessary
+                    totalAmountOfEtherNecessary,
+                    baseToken,
+                    quoteToken
                 );
             }
         }
@@ -539,7 +557,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 tokenNameIndex,
         uint256 priceInWei,
         uint256 amountOfTokensNecessary,
-        uint256 totalAmountOfEtherNecessary
+        uint256 totalAmountOfEtherNecessary,
+        address baseToken,
+        address quoteToken
     ) internal {
         totalAmountOfEtherNecessary = amountOfTokensNecessary * priceInWei;
 
@@ -561,7 +581,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
             tokenNameIndex,
             priceInWei,
             amountOfTokensNecessary,
-            msg.sender
+            msg.sender,
+            baseToken,
+            quoteToken
         );
     }
 
@@ -569,13 +591,15 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 tokenIndex,
         uint256 priceInWei,
         uint256 amount,
-        address who
+        address who,
+        address baseToken,
+        address quoteToken
     ) internal {
         tokens[tokenIndex].buyBook[priceInWei].offers_length++;
 
         tokens[tokenIndex].buyBook[priceInWei].offers[
             tokens[tokenIndex].buyBook[priceInWei].offers_length
-        ] = Offer(amount, who);
+        ] = Offer(amount, who, baseToken, quoteToken);
 
         if (tokens[tokenIndex].buyBook[priceInWei].offers_length == 1) {
             tokens[tokenIndex].buyBook[priceInWei].offers_key = 1;
@@ -648,13 +672,15 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 tokenIndex,
         uint256 priceInWei,
         uint256 amount,
-        address who
+        address who,
+        address baseToken,
+        address quoteToken
     ) internal {
         tokens[tokenIndex].sellBook[priceInWei].offers_length++;
 
         tokens[tokenIndex].sellBook[priceInWei].offers[
             tokens[tokenIndex].sellBook[priceInWei].offers_length
-        ] = Offer(amount, who);
+        ] = Offer(amount, who, baseToken, quoteToken);
 
         if (tokens[tokenIndex].sellBook[priceInWei].offers_length == 1) {
             tokens[tokenIndex].sellBook[priceInWei].offers_key = 1;
@@ -791,7 +817,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     function sellToken(
         string memory symbolName,
         uint256 priceInWei,
-        uint256 amount
+        uint256 amount,
+        address baseToken,
+        address quoteToken
     ) public payable {
         uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
         uint256 totalAmountOfEtherNecessary = 0;
@@ -808,7 +836,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                 tokenNameIndex,
                 priceInWei,
                 amountOfTokensNecessary,
-                totalAmountOfEtherNecessary
+                totalAmountOfEtherNecessary,
+                baseToken,
+                quoteToken
             );
         } else {
             uint256 whilePrice = tokens[tokenNameIndex].curBuyPrice;
@@ -1006,7 +1036,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                     tokenNameIndex,
                     priceInWei,
                     amountOfTokensNecessary,
-                    totalAmountOfEtherNecessary
+                    totalAmountOfEtherNecessary,
+                    baseToken,
+                    quoteToken
                 );
             }
         }
@@ -1017,7 +1049,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 tokenNameIndex,
         uint256 priceInWei,
         uint256 amountOfTokensNecessary,
-        uint256 totalAmountOfEtherNecessary
+        uint256 totalAmountOfEtherNecessary,
+        address baseToken,
+        address quoteToken
     ) internal {
         totalAmountOfEtherNecessary = amountOfTokensNecessary * priceInWei;
 
@@ -1045,7 +1079,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
             tokenNameIndex,
             priceInWei,
             amountOfTokensNecessary,
-            msg.sender
+            msg.sender,
+            baseToken,
+            quoteToken
         );
     }
 
@@ -1088,5 +1124,79 @@ contract Exchange is Pausable, FeeManager, AccessControl {
             });
             currentIndex += 1;
         }
+    }
+
+    function listPairs() public view returns (ItemPair[] memory _pair) {
+        uint256 totalItemCount = _pairIdCounter.current();
+        uint256 currentIndex = 0;
+        _pair = new ItemPair[](totalItemCount);
+        for (uint256 i = 0; i < totalItemCount; i++) {
+            _pair[currentIndex] = pairs[currentIndex];
+            currentIndex += 1;
+        }
+    }
+
+    function addPair(address baseToken, address quoteToken)
+        public
+        onlyRole(MANAGER_ROLE)
+    {
+        IERC20Metadata baseTokenRef = IERC20Metadata(baseToken);
+        require(hasToken(baseTokenRef.symbol()), "invalid asset");
+        IERC20Metadata quoteTokenRef = IERC20Metadata(quoteToken);
+        require(hasToken(quoteTokenRef.symbol()), "invalid asset");
+
+        string memory pair = appendString(
+            baseTokenRef.symbol(),
+            "-",
+            quoteTokenRef.symbol()
+        );
+        _pairIdCounter.increment();
+        _positions.increment();
+
+        pairs[_pairIdCounter.current()] = ItemPair({
+            id: _pairIdCounter.current(),
+            baseToken: baseToken,
+            baseCurrency: baseTokenRef.symbol(),
+            baseScale: baseTokenRef.decimals(),
+            baseMinSize: 0,
+            baseMaxSize: 1000000,
+            quoteToken: quoteToken,
+            quoteCurrency: quoteTokenRef.symbol(),
+            quoteScale: quoteTokenRef.decimals(),
+            quoteMinSize: 0,
+            quoteMaxSize: 1000000,
+            position: _positions.current(),
+            pair: pair
+        });
+    }
+
+    function removePair(address baseToken, address quoteToken)
+        public
+        onlyRole(MANAGER_ROLE)
+    {
+        IERC20Metadata baseTokenRef = IERC20Metadata(baseToken);
+        require(hasToken(baseTokenRef.symbol()), "invalid asset");
+        IERC20Metadata quoteTokenRef = IERC20Metadata(quoteToken);
+        require(hasToken(quoteTokenRef.symbol()), "invalid asset");
+
+        string memory pair = appendString(
+            baseTokenRef.symbol(),
+            "-",
+            quoteTokenRef.symbol()
+        );
+        uint256 index = getPairIndex(pair);
+        if (index == 0) {
+            return;
+        }
+        _pairIdCounter.decrement();
+        delete pairs[index];
+    }
+
+    function appendString(
+        string memory _a,
+        string memory _b,
+        string memory _c
+    ) internal pure returns (string memory) {
+        return string(abi.encodePacked(_a, _b, _c));
     }
 }
