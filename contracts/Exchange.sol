@@ -81,9 +81,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         string pair;
     }
 
-    struct Token {
+    struct OMS {
         address tokenContract;
-        string symbolName;
+        string pair;
         mapping(uint256 => OrderBook) buyBook;
         uint256 curBuyPrice;
         uint256 lowestBuyPrice;
@@ -95,7 +95,10 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         uint256 decimal;
     }
 
-    mapping(uint256 => Token) tokens;
+    mapping(string => OMS) oms;
+
+    mapping(string => OrderBook) buyBook;
+    mapping(string => OrderBook) sellBook;
 
     mapping(address => mapping(uint256 => uint256)) tokenBalanceForAddress;
 
@@ -142,7 +145,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         returns (uint256)
     {
         for (uint256 i = 1; i <= symbolNameIndex.current(); i++) {
-            if (stringsEqual(tokens[i].symbolName, symbolName)) {
+            if (stringsEqual(tokensSupport[i].symbolName, symbolName)) {
                 return i;
             }
         }
@@ -182,45 +185,45 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         return balanceBnbForAddress[msg.sender];
     }
 
-    function depositToken(string memory symbolName, uint256 amountTokens)
-        public
-    {
-        uint256 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
-        require(tokens[symbolNameIndexKey].tokenContract != address(0));
+    // function depositToken(string memory symbolName, uint256 amountTokens)
+    //     public
+    // {
+    //     uint256 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
+    //     require(tokens[symbolNameIndexKey].tokenContract != address(0));
 
-        IERC20 token = IERC20(tokens[symbolNameIndexKey].tokenContract);
+    //     IERC20 token = IERC20(tokens[symbolNameIndexKey].tokenContract);
 
-        require(
-            token.transferFrom(msg.sender, address(this), amountTokens) == true
-        );
-        require(
-            tokenBalanceForAddress[msg.sender][symbolNameIndexKey] +
-                amountTokens >=
-                tokenBalanceForAddress[msg.sender][symbolNameIndexKey]
-        );
-        tokenBalanceForAddress[msg.sender][symbolNameIndexKey] += amountTokens;
-    }
+    //     require(
+    //         token.transferFrom(msg.sender, address(this), amountTokens) == true
+    //     );
+    //     require(
+    //         tokenBalanceForAddress[msg.sender][symbolNameIndexKey] +
+    //             amountTokens >=
+    //             tokenBalanceForAddress[msg.sender][symbolNameIndexKey]
+    //     );
+    //     tokenBalanceForAddress[msg.sender][symbolNameIndexKey] += amountTokens;
+    // }
 
-    function withdrawToken(string memory symbolName, uint256 amountTokens)
-        public
-    {
-        uint256 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
-        require(tokens[symbolNameIndexKey].tokenContract != address(0));
+    // function withdrawToken(string memory symbolName, uint256 amountTokens)
+    //     public
+    // {
+    //     uint256 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
+    //     require(tokens[symbolNameIndexKey].tokenContract != address(0));
 
-        IERC20 token = IERC20(tokens[symbolNameIndexKey].tokenContract);
-        require(
-            tokenBalanceForAddress[msg.sender][symbolNameIndexKey] -
-                amountTokens >=
-                0
-        );
-        require(
-            tokenBalanceForAddress[msg.sender][symbolNameIndexKey] -
-                amountTokens <=
-                tokenBalanceForAddress[msg.sender][symbolNameIndexKey]
-        );
-        tokenBalanceForAddress[msg.sender][symbolNameIndexKey] -= amountTokens;
-        require(token.transfer(msg.sender, amountTokens) == true);
-    }
+    //     IERC20 token = IERC20(tokens[symbolNameIndexKey].tokenContract);
+    //     require(
+    //         tokenBalanceForAddress[msg.sender][symbolNameIndexKey] -
+    //             amountTokens >=
+    //             0
+    //     );
+    //     require(
+    //         tokenBalanceForAddress[msg.sender][symbolNameIndexKey] -
+    //             amountTokens <=
+    //             tokenBalanceForAddress[msg.sender][symbolNameIndexKey]
+    //     );
+    //     tokenBalanceForAddress[msg.sender][symbolNameIndexKey] -= amountTokens;
+    //     require(token.transfer(msg.sender, amountTokens) == true);
+    // }
 
     function getBalance(string memory symbolName)
         public
@@ -231,49 +234,42 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         return tokenBalanceForAddress[msg.sender][symbolNameIndexKey];
     }
 
-    function getSellOrderBook(string memory symbolName)
+    function getSellOrderBook(string memory pair)
         public
         view
         returns (uint256[] memory, uint256[] memory)
     {
-        uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
+        uint256 pairIndex = getPairIndex(pair);
+        require(pairIndex > 0, "invalid pair");
         uint256[] memory arrPricesSell = new uint256[](
-            tokens[tokenNameIndex].amountSellPrices
+            oms[pair].amountSellPrices
         );
         uint256[] memory arrVolumesSell = new uint256[](
-            tokens[tokenNameIndex].amountSellPrices
+            oms[pair].amountSellPrices
         );
-        uint256 sellWhilePrice = tokens[tokenNameIndex].curSellPrice;
+        uint256 sellWhilePrice = oms[pair].curSellPrice;
         uint256 sellCounter = 0;
-        if (tokens[tokenNameIndex].curSellPrice > 0) {
-            while (sellWhilePrice <= tokens[tokenNameIndex].highestSellPrice) {
+        if (oms[pair].curSellPrice > 0) {
+            while (sellWhilePrice <= oms[pair].highestSellPrice) {
                 arrPricesSell[sellCounter] = sellWhilePrice;
                 uint256 sellVolumeAtPrice = 0;
                 uint256 sellOffersKey = 0;
-                sellOffersKey = tokens[tokenNameIndex]
-                    .sellBook[sellWhilePrice]
-                    .offers_key;
+                sellOffersKey = oms[pair].sellBook[sellWhilePrice].offers_key;
                 while (
                     sellOffersKey <=
-                    tokens[tokenNameIndex]
-                        .sellBook[sellWhilePrice]
-                        .offers_length
+                    oms[pair].sellBook[sellWhilePrice].offers_length
                 ) {
-                    sellVolumeAtPrice += tokens[tokenNameIndex]
+                    sellVolumeAtPrice += oms[pair]
                         .sellBook[sellWhilePrice]
                         .offers[sellOffersKey]
                         .amountTokens;
                     sellOffersKey++;
                 }
                 arrVolumesSell[sellCounter] = sellVolumeAtPrice;
-                if (
-                    tokens[tokenNameIndex]
-                        .sellBook[sellWhilePrice]
-                        .higherPrice == 0
-                ) {
+                if (oms[pair].sellBook[sellWhilePrice].higherPrice == 0) {
                     break;
                 } else {
-                    sellWhilePrice = tokens[tokenNameIndex]
+                    sellWhilePrice = oms[pair]
                         .sellBook[sellWhilePrice]
                         .higherPrice;
                 }
@@ -283,34 +279,32 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         return (arrPricesSell, arrVolumesSell);
     }
 
-    function getBuyOrderBook(string memory symbolName)
+    function getBuyOrderBook(string memory pair)
         public
         view
         returns (uint256[] memory, uint256[] memory)
     {
-        uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
+        uint256 pairIndex = getPairIndex(pair);
+        require(pairIndex > 0, "invalid pair");
         uint256[] memory arrPricesBuy = new uint256[](
-            tokens[tokenNameIndex].amountBuyPrices
+            oms[pair].amountBuyPrices
         );
         uint256[] memory arrVolumesBuy = new uint256[](
-            tokens[tokenNameIndex].amountBuyPrices
+            oms[pair].amountBuyPrices
         );
 
-        uint256 whilePrice = tokens[tokenNameIndex].lowestBuyPrice;
+        uint256 whilePrice = oms[pair].lowestBuyPrice;
         uint256 counter = 0;
-        if (tokens[tokenNameIndex].curBuyPrice > 0) {
-            while (whilePrice <= tokens[tokenNameIndex].curBuyPrice) {
+        if (oms[pair].curBuyPrice > 0) {
+            while (whilePrice <= oms[pair].curBuyPrice) {
                 arrPricesBuy[counter] = whilePrice;
                 uint256 buyVolumeAtPrice = 0;
                 uint256 buyOffersKey = 0;
-                buyOffersKey = tokens[tokenNameIndex]
-                    .buyBook[whilePrice]
-                    .offers_key;
+                buyOffersKey = oms[pair].buyBook[whilePrice].offers_key;
                 while (
-                    buyOffersKey <=
-                    tokens[tokenNameIndex].buyBook[whilePrice].offers_length
+                    buyOffersKey <= oms[pair].buyBook[whilePrice].offers_length
                 ) {
-                    buyVolumeAtPrice += tokens[tokenNameIndex]
+                    buyVolumeAtPrice += oms[pair]
                         .buyBook[whilePrice]
                         .offers[buyOffersKey]
                         .amountTokens;
@@ -318,15 +312,10 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                 }
                 arrVolumesBuy[counter] = buyVolumeAtPrice;
 
-                if (
-                    whilePrice ==
-                    tokens[tokenNameIndex].buyBook[whilePrice].higherPrice
-                ) {
+                if (whilePrice == oms[pair].buyBook[whilePrice].higherPrice) {
                     break;
                 } else {
-                    whilePrice = tokens[tokenNameIndex]
-                        .buyBook[whilePrice]
-                        .higherPrice;
+                    whilePrice = oms[pair].buyBook[whilePrice].higherPrice;
                 }
                 counter++;
             }
@@ -335,23 +324,23 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     }
 
     function buyToken(
-        string memory symbolName,
+        string memory pair,
         uint256 priceInWei,
         uint256 amount,
         address baseToken,
         address quoteToken
     ) public {
-        uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
+        uint256 pairIndex = getPairIndex(pair);
+          require(pairIndex > 0, "invalid pair");
         uint256 totalAmountOfEtherNecessary = 0;
         uint256 amountOfTokensNecessary = amount;
 
         if (
-            tokens[tokenNameIndex].amountSellPrices == 0 ||
-            tokens[tokenNameIndex].curSellPrice > priceInWei
+            oms[pair].amountSellPrices == 0 ||
+            oms[pair].curSellPrice > priceInWei
         ) {
             createBuyLimitOrderForTokensUnableToMatchWithSellOrderForBuyer(
-                symbolName,
-                tokenNameIndex,
+                pair,
                 priceInWei,
                 amountOfTokensNecessary,
                 totalAmountOfEtherNecessary,
@@ -360,18 +349,16 @@ contract Exchange is Pausable, FeeManager, AccessControl {
             );
         } else {
             uint256 totalAmountOfEtherAvailable = 0;
-            uint256 whilePrice = tokens[tokenNameIndex].curSellPrice;
+            uint256 whilePrice = oms[pair].curSellPrice;
             uint256 offers_key;
             while (whilePrice <= priceInWei && amountOfTokensNecessary > 0) {
-                offers_key = tokens[tokenNameIndex]
-                    .sellBook[whilePrice]
-                    .offers_key;
+                offers_key = oms[pair].sellBook[whilePrice].offers_key;
                 while (
                     offers_key <=
-                    tokens[tokenNameIndex].sellBook[whilePrice].offers_length &&
+                    oms[pair].sellBook[whilePrice].offers_length &&
                     amountOfTokensNecessary > 0
                 ) {
-                    uint256 volumeAtPriceFromAddress = tokens[tokenNameIndex]
+                    uint256 volumeAtPriceFromAddress = oms[pair]
                         .sellBook[whilePrice]
                         .offers[offers_key]
                         .amountTokens;
@@ -399,51 +386,49 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                         );
                         require(uint256(1) > uint256(0));
                         require(
-                            tokenBalanceForAddress[msg.sender][tokenNameIndex] +
+                            tokenBalanceForAddress[msg.sender][pairIndex] +
                                 volumeAtPriceFromAddress >=
-                                tokenBalanceForAddress[msg.sender][
-                                    tokenNameIndex
-                                ]
+                                tokenBalanceForAddress[msg.sender][pairIndex]
                         );
-                        require(
-                            balanceBnbForAddress[
-                                tokens[tokenNameIndex]
-                                    .sellBook[whilePrice]
-                                    .offers[offers_key]
-                                    .who
-                            ] +
-                                totalAmountOfEtherAvailable >=
-                                balanceBnbForAddress[
-                                    tokens[tokenNameIndex]
-                                        .sellBook[whilePrice]
-                                        .offers[offers_key]
-                                        .who
-                                ]
-                        );
+                         // check balance ERC20 - todo
+
+                        // require(
+                        //     balanceBnbForAddress[
+                        //         oms[pair]
+                        //             .sellBook[whilePrice]
+                        //             .offers[offers_key]
+                        //             .who
+                        //     ] +
+                        //         totalAmountOfEtherAvailable >=
+                        //         balanceBnbForAddress[
+                        //             oms[pair]
+                        //                 .sellBook[whilePrice]
+                        //                 .offers[offers_key]
+                        //                 .who
+                        //         ]
+                        // );
 
                         tokenBalanceForAddress[msg.sender][
-                            tokenNameIndex
+                            pairIndex
                         ] += volumeAtPriceFromAddress;
 
-                        tokens[tokenNameIndex]
+                        oms[pair]
                             .sellBook[whilePrice]
                             .offers[offers_key]
                             .amountTokens = 0;
 
                         balanceBnbForAddress[
-                            tokens[tokenNameIndex]
+                            oms[pair]
                                 .sellBook[whilePrice]
                                 .offers[offers_key]
                                 .who
                         ] += totalAmountOfEtherAvailable;
-                        tokens[tokenNameIndex]
-                            .sellBook[whilePrice]
-                            .offers_key++;
+                        oms[pair].sellBook[whilePrice].offers_key++;
 
                         amountOfTokensNecessary -= volumeAtPriceFromAddress;
                     } else {
                         require(
-                            tokens[tokenNameIndex]
+                            oms[pair]
                                 .sellBook[whilePrice]
                                 .offers[offers_key]
                                 .amountTokens > amountOfTokensNecessary
@@ -462,71 +447,67 @@ contract Exchange is Pausable, FeeManager, AccessControl {
 
                         balanceBnbForAddress[
                             msg.sender
+                    
                         ] -= totalAmountOfEtherNecessary;
 
-                        // Overflow Check
-                        require(
-                            balanceBnbForAddress[
-                                tokens[tokenNameIndex]
-                                    .sellBook[whilePrice]
-                                    .offers[offers_key]
-                                    .who
-                            ] +
-                                totalAmountOfEtherNecessary >=
-                                balanceBnbForAddress[
-                                    tokens[tokenNameIndex]
-                                        .sellBook[whilePrice]
-                                        .offers[offers_key]
-                                        .who
-                                ]
-                        );
+                         // check balance ERC20 - todo
 
-                        tokens[tokenNameIndex]
+                        // Overflow Check
+                        // require(
+                        //     balanceBnbForAddress[
+                        //         oms[pair]
+                        //             .sellBook[whilePrice]
+                        //             .offers[offers_key]
+                        //             .who
+                        //     ] +
+                        //         totalAmountOfEtherNecessary >=
+                        //         balanceBnbForAddress[
+                        //             oms[pair]
+                        //                 .sellBook[whilePrice]
+                        //                 .offers[offers_key]
+                        //                 .who
+                        //         ]
+                        // );
+
+                        oms[pair]
                             .sellBook[whilePrice]
                             .offers[offers_key]
                             .amountTokens -= amountOfTokensNecessary;
                         balanceBnbForAddress[
-                            tokens[tokenNameIndex]
+                            oms[pair]
                                 .sellBook[whilePrice]
                                 .offers[offers_key]
                                 .who
                         ] += totalAmountOfEtherNecessary;
                         tokenBalanceForAddress[msg.sender][
-                            tokenNameIndex
+                            pairIndex
                         ] += amountOfTokensNecessary;
                         amountOfTokensNecessary = 0;
                     }
 
                     if (
                         offers_key ==
-                        tokens[tokenNameIndex]
-                            .sellBook[whilePrice]
-                            .offers_length &&
-                        tokens[tokenNameIndex]
+                        oms[pair].sellBook[whilePrice].offers_length &&
+                        oms[pair]
                             .sellBook[whilePrice]
                             .offers[offers_key]
                             .amountTokens ==
                         0
                     ) {
-                        tokens[tokenNameIndex].amountSellPrices--;
+                        oms[pair].amountSellPrices--;
                         if (
                             whilePrice ==
-                            tokens[tokenNameIndex]
-                                .sellBook[whilePrice]
-                                .higherPrice ||
-                            tokens[tokenNameIndex]
-                                .sellBook[whilePrice]
-                                .higherPrice ==
-                            0
+                            oms[pair].sellBook[whilePrice].higherPrice ||
+                            oms[pair].sellBook[whilePrice].higherPrice == 0
                         ) {
-                            tokens[tokenNameIndex].curSellPrice = 0;
+                            oms[pair].curSellPrice = 0;
                         } else {
-                            tokens[tokenNameIndex].curSellPrice = tokens[
-                                tokenNameIndex
-                            ].sellBook[whilePrice].higherPrice;
-                            tokens[tokenNameIndex]
+                            oms[pair].curSellPrice = oms[pair]
+                                .sellBook[whilePrice]
+                                .higherPrice;
+                            oms[pair]
                                 .sellBook[
-                                    tokens[tokenNameIndex]
+                                    oms[pair]
                                         .sellBook[whilePrice]
                                         .higherPrice
                                 ]
@@ -535,13 +516,12 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                     }
                     offers_key++;
                 }
-                whilePrice = tokens[tokenNameIndex].curSellPrice;
+                whilePrice = oms[pair].curSellPrice;
             }
 
             if (amountOfTokensNecessary > 0) {
                 createBuyLimitOrderForTokensUnableToMatchWithSellOrderForBuyer(
-                    symbolName,
-                    tokenNameIndex,
+                    pair,
                     priceInWei,
                     amountOfTokensNecessary,
                     totalAmountOfEtherNecessary,
@@ -553,8 +533,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     }
 
     function createBuyLimitOrderForTokensUnableToMatchWithSellOrderForBuyer(
-        string memory symbolName,
-        uint256 tokenNameIndex,
+        string memory pair,
         uint256 priceInWei,
         uint256 amountOfTokensNecessary,
         uint256 totalAmountOfEtherNecessary,
@@ -562,6 +541,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         address quoteToken
     ) internal {
         totalAmountOfEtherNecessary = amountOfTokensNecessary * priceInWei;
+        
 
         require(totalAmountOfEtherNecessary >= amountOfTokensNecessary);
         require(totalAmountOfEtherNecessary >= priceInWei);
@@ -578,7 +558,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
 
         balanceBnbForAddress[msg.sender] -= totalAmountOfEtherNecessary;
         addBuyOffer(
-            tokenNameIndex,
+            pair,
             priceInWei,
             amountOfTokensNecessary,
             msg.sender,
@@ -588,215 +568,192 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     }
 
     function addBuyOffer(
-        uint256 tokenIndex,
+        string memory pair,
         uint256 priceInWei,
         uint256 amount,
         address who,
         address baseToken,
         address quoteToken
     ) internal {
-        tokens[tokenIndex].buyBook[priceInWei].offers_length++;
+        oms[pair].buyBook[priceInWei].offers_length++;
 
-        tokens[tokenIndex].buyBook[priceInWei].offers[
-            tokens[tokenIndex].buyBook[priceInWei].offers_length
+        oms[pair].buyBook[priceInWei].offers[
+            oms[pair].buyBook[priceInWei].offers_length
         ] = Offer(amount, who, baseToken, quoteToken);
 
-        if (tokens[tokenIndex].buyBook[priceInWei].offers_length == 1) {
-            tokens[tokenIndex].buyBook[priceInWei].offers_key = 1;
-            tokens[tokenIndex].amountBuyPrices++;
-            uint256 curBuyPrice = tokens[tokenIndex].curBuyPrice;
-            uint256 lowestBuyPrice = tokens[tokenIndex].lowestBuyPrice;
+        if (oms[pair].buyBook[priceInWei].offers_length == 1) {
+            oms[pair].buyBook[priceInWei].offers_key = 1;
+            oms[pair].amountBuyPrices++;
+            uint256 curBuyPrice = oms[pair].curBuyPrice;
+            uint256 lowestBuyPrice = oms[pair].lowestBuyPrice;
             if (lowestBuyPrice == 0 || lowestBuyPrice > priceInWei) {
                 if (curBuyPrice == 0) {
-                    tokens[tokenIndex].curBuyPrice = priceInWei;
+                    oms[pair].curBuyPrice = priceInWei;
 
-                    tokens[tokenIndex]
-                        .buyBook[priceInWei]
-                        .higherPrice = priceInWei;
+                    oms[pair].buyBook[priceInWei].higherPrice = priceInWei;
 
-                    tokens[tokenIndex].buyBook[priceInWei].lowerPrice = 0;
+                    oms[pair].buyBook[priceInWei].lowerPrice = 0;
                 } else {
-                    tokens[tokenIndex]
+                    oms[pair]
                         .buyBook[lowestBuyPrice]
                         .lowerPrice = priceInWei;
-                    tokens[tokenIndex]
+                    oms[pair]
                         .buyBook[priceInWei]
                         .higherPrice = lowestBuyPrice;
-                    tokens[tokenIndex].buyBook[priceInWei].lowerPrice = 0;
+                    oms[pair].buyBook[priceInWei].lowerPrice = 0;
                 }
-                tokens[tokenIndex].lowestBuyPrice = priceInWei;
+                oms[pair].lowestBuyPrice = priceInWei;
             } else if (curBuyPrice < priceInWei) {
-                tokens[tokenIndex]
-                    .buyBook[curBuyPrice]
-                    .higherPrice = priceInWei;
-                tokens[tokenIndex].buyBook[priceInWei].higherPrice = priceInWei;
-                tokens[tokenIndex].buyBook[priceInWei].lowerPrice = curBuyPrice;
-                tokens[tokenIndex].curBuyPrice = priceInWei;
+                oms[pair].buyBook[curBuyPrice].higherPrice = priceInWei;
+                oms[pair].buyBook[priceInWei].higherPrice = priceInWei;
+                oms[pair].buyBook[priceInWei].lowerPrice = curBuyPrice;
+                oms[pair].curBuyPrice = priceInWei;
             } else {
-                uint256 buyPrice = tokens[tokenIndex].curBuyPrice;
+                uint256 buyPrice = oms[pair].curBuyPrice;
                 bool weFoundLocation = false;
                 while (buyPrice > 0 && !weFoundLocation) {
                     if (
                         buyPrice < priceInWei &&
-                        tokens[tokenIndex].buyBook[buyPrice].higherPrice >
+                        oms[pair].buyBook[buyPrice].higherPrice >
                         priceInWei
                     ) {
-                        tokens[tokenIndex]
+                        oms[pair]
                             .buyBook[priceInWei]
                             .lowerPrice = buyPrice;
-                        tokens[tokenIndex]
-                            .buyBook[priceInWei]
-                            .higherPrice = tokens[tokenIndex]
-                            .buyBook[buyPrice]
-                            .higherPrice;
+                        oms[pair].buyBook[priceInWei].higherPrice = oms[
+                            pair
+                        ].buyBook[buyPrice].higherPrice;
 
-                        tokens[tokenIndex]
+                        oms[pair]
                             .buyBook[
-                                tokens[tokenIndex].buyBook[buyPrice].higherPrice
+                                oms[pair].buyBook[buyPrice].higherPrice
                             ]
                             .lowerPrice = priceInWei;
 
-                        tokens[tokenIndex]
+                        oms[pair]
                             .buyBook[buyPrice]
                             .higherPrice = priceInWei;
 
                         weFoundLocation = true;
                     }
-                    buyPrice = tokens[tokenIndex].buyBook[buyPrice].lowerPrice;
+                    buyPrice = oms[pair].buyBook[buyPrice].lowerPrice;
                 }
             }
         }
     }
 
     function addSellOffer(
-        uint256 tokenIndex,
+        string memory pair,
         uint256 priceInWei,
         uint256 amount,
         address who,
         address baseToken,
         address quoteToken
     ) internal {
-        tokens[tokenIndex].sellBook[priceInWei].offers_length++;
+        oms[pair].sellBook[priceInWei].offers_length++;
 
-        tokens[tokenIndex].sellBook[priceInWei].offers[
-            tokens[tokenIndex].sellBook[priceInWei].offers_length
+        oms[pair].sellBook[priceInWei].offers[
+            oms[pair].sellBook[priceInWei].offers_length
         ] = Offer(amount, who, baseToken, quoteToken);
 
-        if (tokens[tokenIndex].sellBook[priceInWei].offers_length == 1) {
-            tokens[tokenIndex].sellBook[priceInWei].offers_key = 1;
-            tokens[tokenIndex].amountSellPrices++;
+        if (oms[pair].sellBook[priceInWei].offers_length == 1) {
+            oms[pair].sellBook[priceInWei].offers_key = 1;
+            oms[pair].amountSellPrices++;
 
-            uint256 curSellPrice = tokens[tokenIndex].curSellPrice;
-            uint256 highestSellPrice = tokens[tokenIndex].highestSellPrice;
+            uint256 curSellPrice = oms[pair].curSellPrice;
+            uint256 highestSellPrice = oms[pair].highestSellPrice;
 
             if (highestSellPrice == 0 || highestSellPrice < priceInWei) {
                 if (curSellPrice == 0) {
-                    tokens[tokenIndex].curSellPrice = priceInWei;
-                    tokens[tokenIndex].sellBook[priceInWei].higherPrice = 0;
-                    tokens[tokenIndex].sellBook[priceInWei].lowerPrice = 0;
+                    oms[pair].curSellPrice = priceInWei;
+                    oms[pair].sellBook[priceInWei].higherPrice = 0;
+                    oms[pair].sellBook[priceInWei].lowerPrice = 0;
                 } else {
-                    tokens[tokenIndex]
+                    oms[pair]
                         .sellBook[highestSellPrice]
                         .higherPrice = priceInWei;
-                    tokens[tokenIndex]
+                    oms[pair]
                         .sellBook[priceInWei]
                         .lowerPrice = highestSellPrice;
-                    tokens[tokenIndex].sellBook[priceInWei].higherPrice = 0;
+                    oms[pair].sellBook[priceInWei].higherPrice = 0;
                 }
-                tokens[tokenIndex].highestSellPrice = priceInWei;
+                oms[pair].highestSellPrice = priceInWei;
             } else if (curSellPrice > priceInWei) {
-                tokens[tokenIndex]
-                    .sellBook[curSellPrice]
-                    .lowerPrice = priceInWei;
-                tokens[tokenIndex]
-                    .sellBook[priceInWei]
-                    .higherPrice = curSellPrice;
-                tokens[tokenIndex].sellBook[priceInWei].lowerPrice = 0;
-                tokens[tokenIndex].curSellPrice = priceInWei;
+                oms[pair].sellBook[curSellPrice].lowerPrice = priceInWei;
+                oms[pair].sellBook[priceInWei].higherPrice = curSellPrice;
+                oms[pair].sellBook[priceInWei].lowerPrice = 0;
+                oms[pair].curSellPrice = priceInWei;
             } else {
-                uint256 sellPrice = tokens[tokenIndex].curSellPrice;
+                uint256 sellPrice = oms[pair].curSellPrice;
                 bool weFoundLocation = false;
 
                 while (sellPrice > 0 && !weFoundLocation) {
                     if (
                         sellPrice < priceInWei &&
-                        tokens[tokenIndex].sellBook[sellPrice].higherPrice >
+                        oms[pair].sellBook[sellPrice].higherPrice >
                         priceInWei
                     ) {
-                        tokens[tokenIndex]
+                        oms[pair]
                             .sellBook[priceInWei]
                             .lowerPrice = sellPrice;
-                        tokens[tokenIndex]
-                            .sellBook[priceInWei]
-                            .higherPrice = tokens[tokenIndex]
-                            .sellBook[sellPrice]
-                            .higherPrice;
+                        oms[pair].sellBook[priceInWei].higherPrice = oms[
+                            pair
+                        ].sellBook[sellPrice].higherPrice;
 
-                        tokens[tokenIndex]
+                        oms[pair]
                             .sellBook[
-                                tokens[tokenIndex]
-                                    .sellBook[sellPrice]
-                                    .higherPrice
+                                oms[pair].sellBook[sellPrice].higherPrice
                             ]
                             .lowerPrice = priceInWei;
 
-                        tokens[tokenIndex]
+                        oms[pair]
                             .sellBook[sellPrice]
                             .higherPrice = priceInWei;
 
                         weFoundLocation = true;
                     }
 
-                    sellPrice = tokens[tokenIndex]
-                        .sellBook[sellPrice]
-                        .higherPrice;
+                    sellPrice = oms[pair].sellBook[sellPrice].higherPrice;
                 }
             }
         }
     }
 
     function cancelOrder(
-        string memory symbolName,
+        string memory pair,
         bool isSellOrder,
         uint256 priceInWei,
         uint256 offerKey
     ) public {
-        uint256 symbolNameIndexKey = getSymbolIndexOrThrow(symbolName);
+        uint256 pairIndex = getPairIndex(pair);
 
         if (isSellOrder) {
             require(
-                tokens[symbolNameIndexKey]
-                    .sellBook[priceInWei]
-                    .offers[offerKey]
-                    .who == msg.sender
+                oms[pair].sellBook[priceInWei].offers[offerKey].who ==
+                    msg.sender
             );
 
-            uint256 tokensAmount = tokens[symbolNameIndexKey]
+            uint256 tokensAmount = oms[pair]
                 .sellBook[priceInWei]
                 .offers[offerKey]
                 .amountTokens;
 
             require(
-                tokenBalanceForAddress[msg.sender][symbolNameIndexKey] +
-                    tokensAmount >=
-                    tokenBalanceForAddress[msg.sender][symbolNameIndexKey]
+                tokenBalanceForAddress[msg.sender][pairIndex] + tokensAmount >=
+                    tokenBalanceForAddress[msg.sender][pairIndex]
             );
 
-            tokenBalanceForAddress[msg.sender][
-                symbolNameIndexKey
-            ] += tokensAmount;
-            tokens[symbolNameIndexKey]
+            tokenBalanceForAddress[msg.sender][pairIndex] += tokensAmount;
+            oms[pair]
                 .sellBook[priceInWei]
                 .offers[offerKey]
                 .amountTokens = 0;
         } else {
             require(
-                tokens[symbolNameIndexKey]
-                    .buyBook[priceInWei]
-                    .offers[offerKey]
-                    .who == msg.sender
+                oms[pair].buyBook[priceInWei].offers[offerKey].who ==
+                    msg.sender
             );
-            uint256 etherToRefund = tokens[symbolNameIndexKey]
+            uint256 etherToRefund = oms[pair]
                 .buyBook[priceInWei]
                 .offers[offerKey]
                 .amountTokens * priceInWei;
@@ -807,7 +764,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
             );
 
             balanceBnbForAddress[msg.sender] += etherToRefund;
-            tokens[symbolNameIndexKey]
+            oms[pair]
                 .buyBook[priceInWei]
                 .offers[offerKey]
                 .amountTokens = 0;
@@ -815,25 +772,25 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     }
 
     function sellToken(
-        string memory symbolName,
+        string memory pair,
         uint256 priceInWei,
         uint256 amount,
         address baseToken,
         address quoteToken
     ) public payable {
-        uint256 tokenNameIndex = getSymbolIndexOrThrow(symbolName);
+        uint256 pairIndex = getPairIndex(pair);
         uint256 totalAmountOfEtherNecessary = 0;
         uint256 totalAmountOfEtherAvailable = 0;
 
         uint256 amountOfTokensNecessary = amount;
 
         if (
-            tokens[tokenNameIndex].amountBuyPrices == 0 ||
-            tokens[tokenNameIndex].curBuyPrice < priceInWei
+            oms[pair].amountBuyPrices == 0 ||
+            oms[pair].curBuyPrice < priceInWei
         ) {
             createSellLimitOrderForTokensUnableToMatchWithBuyOrderForSeller(
-                symbolName,
-                tokenNameIndex,
+                pair,
+                pairIndex,
                 priceInWei,
                 amountOfTokensNecessary,
                 totalAmountOfEtherNecessary,
@@ -841,20 +798,18 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                 quoteToken
             );
         } else {
-            uint256 whilePrice = tokens[tokenNameIndex].curBuyPrice;
+            uint256 whilePrice = oms[pair].curBuyPrice;
             uint256 offers_key;
 
             while (whilePrice >= priceInWei && amountOfTokensNecessary > 0) {
-                offers_key = tokens[tokenNameIndex]
-                    .buyBook[whilePrice]
-                    .offers_key;
+                offers_key = oms[pair].buyBook[whilePrice].offers_key;
 
                 while (
                     offers_key <=
-                    tokens[tokenNameIndex].buyBook[whilePrice].offers_length &&
+                    oms[pair].buyBook[whilePrice].offers_length &&
                     amountOfTokensNecessary > 0
                 ) {
-                    uint256 volumeAtPriceFromAddress = tokens[tokenNameIndex]
+                    uint256 volumeAtPriceFromAddress = oms[pair]
                         .buyBook[whilePrice]
                         .offers[offers_key]
                         .amountTokens;
@@ -865,36 +820,37 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                             whilePrice;
 
                         require(
-                            tokenBalanceForAddress[msg.sender][
-                                tokenNameIndex
-                            ] >= volumeAtPriceFromAddress
+                            tokenBalanceForAddress[msg.sender][pairIndex] >=
+                                volumeAtPriceFromAddress
                         );
 
                         tokenBalanceForAddress[msg.sender][
-                            tokenNameIndex
+                            pairIndex
                         ] -= volumeAtPriceFromAddress;
 
                         require(
-                            tokenBalanceForAddress[msg.sender][tokenNameIndex] -
+                            tokenBalanceForAddress[msg.sender][pairIndex] -
                                 volumeAtPriceFromAddress >=
                                 0
                         );
 
-                        require(
-                            tokenBalanceForAddress[
-                                tokens[tokenNameIndex]
-                                    .buyBook[whilePrice]
-                                    .offers[offers_key]
-                                    .who
-                            ][tokenNameIndex] +
-                                volumeAtPriceFromAddress >=
-                                tokenBalanceForAddress[
-                                    tokens[tokenNameIndex]
-                                        .buyBook[whilePrice]
-                                        .offers[offers_key]
-                                        .who
-                                ][tokenNameIndex]
-                        );
+                        // check balance ERC20 - todo
+
+                        // require(
+                        //     tokenBalanceForAddress[
+                        //         oms[pair]
+                        //             .buyBook[whilePrice]
+                        //             .offers[offers_key]
+                        //             .who
+                        //     ][pairIndex] +
+                        //         volumeAtPriceFromAddress >=
+                        //         tokenBalanceForAddress[
+                        //             oms[pair]
+                        //                 .buyBook[whilePrice]
+                        //                 .offers[offers_key]
+                        //                 .who
+                        //         ][pairIndex]
+                        // );
 
                         require(
                             balanceBnbForAddress[msg.sender] +
@@ -903,13 +859,13 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                         );
 
                         tokenBalanceForAddress[
-                            tokens[tokenNameIndex]
+                            oms[pair]
                                 .buyBook[whilePrice]
                                 .offers[offers_key]
                                 .who
-                        ][tokenNameIndex] += volumeAtPriceFromAddress;
+                        ][pairIndex] += volumeAtPriceFromAddress;
 
-                        tokens[tokenNameIndex]
+                        oms[pair]
                             .buyBook[whilePrice]
                             .offers[offers_key]
                             .amountTokens = 0;
@@ -918,7 +874,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                             msg.sender
                         ] += totalAmountOfEtherAvailable;
 
-                        tokens[tokenNameIndex].buyBook[whilePrice].offers_key++;
+                        oms[pair].buyBook[whilePrice].offers_key++;
 
                         amountOfTokensNecessary -= volumeAtPriceFromAddress;
                     } else {
@@ -932,42 +888,42 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                             whilePrice;
 
                         require(
-                            tokenBalanceForAddress[msg.sender][
-                                tokenNameIndex
-                            ] >= amountOfTokensNecessary
+                            tokenBalanceForAddress[msg.sender][pairIndex] >=
+                                amountOfTokensNecessary
                         );
 
                         tokenBalanceForAddress[msg.sender][
-                            tokenNameIndex
+                            pairIndex
                         ] -= amountOfTokensNecessary;
 
                         require(
-                            tokenBalanceForAddress[msg.sender][
-                                tokenNameIndex
-                            ] >= amountOfTokensNecessary
+                            tokenBalanceForAddress[msg.sender][pairIndex] >=
+                                amountOfTokensNecessary
                         );
                         require(
                             balanceBnbForAddress[msg.sender] +
                                 totalAmountOfEtherNecessary >=
                                 balanceBnbForAddress[msg.sender]
                         );
-                        require(
-                            tokenBalanceForAddress[
-                                tokens[tokenNameIndex]
-                                    .buyBook[whilePrice]
-                                    .offers[offers_key]
-                                    .who
-                            ][tokenNameIndex] +
-                                amountOfTokensNecessary >=
-                                tokenBalanceForAddress[
-                                    tokens[tokenNameIndex]
-                                        .buyBook[whilePrice]
-                                        .offers[offers_key]
-                                        .who
-                                ][tokenNameIndex]
-                        );
 
-                        tokens[tokenNameIndex]
+                         // check balance ERC20 - todo
+                        // require(
+                        //     tokenBalanceForAddress[
+                        //         oms[pair]
+                        //             .buyBook[whilePrice]
+                        //             .offers[offers_key]
+                        //             .who
+                        //     ][pairIndex] +
+                        //         amountOfTokensNecessary >=
+                        //         tokenBalanceForAddress[
+                        //             oms[pair]
+                        //                 .buyBook[whilePrice]
+                        //                 .offers[offers_key]
+                        //                 .who
+                        //         ][pairIndex]
+                        // );
+
+                        oms[pair]
                             .buyBook[whilePrice]
                             .offers[offers_key]
                             .amountTokens -= amountOfTokensNecessary;
@@ -977,63 +933,55 @@ contract Exchange is Pausable, FeeManager, AccessControl {
                         ] += totalAmountOfEtherNecessary;
 
                         tokenBalanceForAddress[
-                            tokens[tokenNameIndex]
+                            oms[pair]
                                 .buyBook[whilePrice]
                                 .offers[offers_key]
                                 .who
-                        ][tokenNameIndex] += amountOfTokensNecessary;
+                        ][pairIndex] += amountOfTokensNecessary;
 
                         amountOfTokensNecessary = 0;
                     }
 
                     if (
                         offers_key ==
-                        tokens[tokenNameIndex]
-                            .buyBook[whilePrice]
-                            .offers_length &&
-                        tokens[tokenNameIndex]
+                        oms[pair].buyBook[whilePrice].offers_length &&
+                        oms[pair]
                             .buyBook[whilePrice]
                             .offers[offers_key]
                             .amountTokens ==
                         0
                     ) {
-                        tokens[tokenNameIndex].amountBuyPrices--;
+                        oms[pair].amountBuyPrices--;
                         if (
                             whilePrice ==
-                            tokens[tokenNameIndex]
-                                .buyBook[whilePrice]
-                                .lowerPrice ||
-                            tokens[tokenNameIndex]
-                                .buyBook[whilePrice]
-                                .lowerPrice ==
-                            0
+                            oms[pair].buyBook[whilePrice].lowerPrice ||
+                            oms[pair].buyBook[whilePrice].lowerPrice == 0
                         ) {
-                            tokens[tokenNameIndex].curBuyPrice = 0;
+                            oms[pair].curBuyPrice = 0;
                         } else {
-                            tokens[tokenNameIndex].curBuyPrice = tokens[
-                                tokenNameIndex
-                            ].buyBook[whilePrice].lowerPrice;
+                            oms[pair].curBuyPrice = oms[pair]
+                                .buyBook[whilePrice]
+                                .lowerPrice;
 
-                            tokens[tokenNameIndex]
+                            oms[pair]
                                 .buyBook[
-                                    tokens[tokenNameIndex]
+                                    oms[pair]
                                         .buyBook[whilePrice]
                                         .lowerPrice
                                 ]
-                                .higherPrice = tokens[tokenNameIndex]
-                                .curBuyPrice;
+                                .higherPrice = oms[pair].curBuyPrice;
                         }
                     }
                     offers_key++;
                 }
 
-                whilePrice = tokens[tokenNameIndex].curBuyPrice;
+                whilePrice = oms[pair].curBuyPrice;
             }
 
             if (amountOfTokensNecessary > 0) {
                 createSellLimitOrderForTokensUnableToMatchWithBuyOrderForSeller(
-                    symbolName,
-                    tokenNameIndex,
+                    pair,
+                    pairIndex,
                     priceInWei,
                     amountOfTokensNecessary,
                     totalAmountOfEtherNecessary,
@@ -1045,7 +993,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
     }
 
     function createSellLimitOrderForTokensUnableToMatchWithBuyOrderForSeller(
-        string memory symbolName,
+        string memory pair,
         uint256 tokenNameIndex,
         uint256 priceInWei,
         uint256 amountOfTokensNecessary,
@@ -1076,7 +1024,7 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         ] -= amountOfTokensNecessary;
 
         addSellOffer(
-            tokenNameIndex,
+            pair,
             priceInWei,
             amountOfTokensNecessary,
             msg.sender,
@@ -1089,9 +1037,9 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         IERC20Metadata newToken = IERC20Metadata(tokenAddress);
         require(!hasToken(newToken.symbol()));
         symbolNameIndex.increment();
-        tokens[symbolNameIndex.current()].symbolName = newToken.symbol();
-        tokens[symbolNameIndex.current()].decimal = newToken.decimals();
-        tokens[symbolNameIndex.current()].tokenContract = tokenAddress;
+        tokensSupport[symbolNameIndex.current()].symbolName = newToken.symbol();
+        tokensSupport[symbolNameIndex.current()].decimal = newToken.decimals();
+        tokensSupport[symbolNameIndex.current()].tokenContract = tokenAddress;
     }
 
     function removeToken(string memory symbolName)
@@ -1102,27 +1050,18 @@ contract Exchange is Pausable, FeeManager, AccessControl {
         if (index == 0) {
             return;
         }
-        delete tokens[index];
+        delete tokensSupport[index];
     }
 
     function listTokens() public view returns (TokenItem[] memory _tokens) {
         uint256 totalItemCount = symbolNameIndex.current();
         uint256 currentIndex = 0;
+        uint256 currentId = 1;
         _tokens = new TokenItem[](totalItemCount);
         for (uint256 i = 0; i < totalItemCount; i++) {
-            uint256 currentId = 1;
-            _tokens[currentIndex] = TokenItem({
-                curSellPrice: tokens[currentId].curSellPrice,
-                highestSellPrice: tokens[currentId].highestSellPrice,
-                amountSellPrices: tokens[currentId].amountSellPrices,
-                curBuyPrice: tokens[currentId].curBuyPrice,
-                lowestBuyPrice: tokens[currentId].lowestBuyPrice,
-                amountBuyPrices: tokens[currentId].amountBuyPrices,
-                tokenContract: tokens[currentId].tokenContract,
-                symbolName: tokens[currentId].symbolName,
-                decimal: tokens[currentId].decimal
-            });
+            _tokens[currentIndex] = tokensSupport[currentId];
             currentIndex += 1;
+            currentId += 1;
         }
     }
 
