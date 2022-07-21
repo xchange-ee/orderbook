@@ -15,7 +15,7 @@
     "author": "Rafael Medeiros <rafaelgurudesign@gmail.com>",
     "license": "MIT",
     "dependencies": {
-        "@openzeppelin/contracts": "4.4.2",
+        "@openzeppelin/contracts": "4.7.1",
         "@truffle/hdwallet-provider": "2.0.8",
         "dotenv": "^8.2.0"
     },
